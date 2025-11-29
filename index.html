@@ -1,122 +1,132 @@
 <!DOCTYPE html>
 <html lang="en-us">
-<head>
+  <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <title>Good Forces - Unity WebGL Player | Aviator</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
     <link rel="manifest" href="manifest.webmanifest">
-    <script src="https://api.ok.ru/js/ok.js"></script>
-</head>
-<body>
-<div id="unity-container">
-    <canvas id="unity-canvas" width=960 height=640 tabindex="-1"></canvas>
-    <div id="unity-loading-bar">
+  </head>
+  <body>
+    <div id="unity-container">
+      <canvas id="unity-canvas" width=960 height=640 tabindex="-1"></canvas>
+      <div id="unity-loading-bar">
         <div id="unity-logo"></div>
         <div id="unity-progress-bar-empty">
-            <div id="unity-progress-bar-full"></div>
+          <div id="unity-progress-bar-full"></div>
         </div>
+      </div>
+      <div id="unity-warning"> </div>
     </div>
-    <div id="unity-warning"></div>
-</div>
-
-<script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
-<script>
-    window.addEventListener("load", function () {
+<!--    <script src="https://unpkg.com/@vkontakte/superappkit@1.57.0/dist/index-umd.js"></script>-->
+    <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
+    <script>
+      window.addEventListener("load", function () {
         if ("serviceWorker" in navigator) {
-            navigator.serviceWorker.register("ServiceWorker.js");
+          navigator.serviceWorker.register("ServiceWorker.js");
         }
-    });
+      });
+      
+      console.info( window );
+      console.info( window.vkBridge );
 
-    console.info("VK Bridge:", window.vkBridge);
-    console.info("OKSDK loaded:", typeof OKSDK !== 'undefined');
-    console.info("OKAds loaded:", typeof OKAds !== 'undefined');
+      window.vkBridge.send('VKWebAppInit', {});
+     /* window.vkBridge.subscribe((e) => {
+        console.log( "vkBridge event ----------------------------" );
+        console.info( e );
+      });*/
 
-    window.vkBridge.send('VKWebAppInit', {});
+      window.unityInstance = null;
+      var unityInstance = null;
 
-    window.unityInstance = null;
-    var unityInstance = null;
+      window.idb = null;
 
-    window.idb = null;
+      let indexedDB = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB || window.shimIndexedDB;
 
-    let indexedDB = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB || window.shimIndexedDB;
+      let open = indexedDB.open("RA1", 2);
 
-    let open = indexedDB.open("RA1", 2);
-
-    open.onupgradeneeded = function() {
+      open.onupgradeneeded = function() {
         let db = open.result;
-        db.createObjectStore("Saves", {keyPath: "id"});
-    };
+        let store = db.createObjectStore("Saves", {keyPath: "id"});
+        //    var index = store.createIndex("NameIndex", ["name.last", "name.first"]);
+      };
 
-    open.onsuccess = function() {
+      open.onsuccess = function() {
         window.idb = open.result;
-    };
-
-    window.getIndexedDB = function () {
+      };
+      
+      window.getIndexedDB = function () {
         return window.idb;
-    };
+      };
+      
+      var container = document.querySelector("#unity-container");
+      var canvas = document.querySelector("#unity-canvas");
+      var loadingBar = document.querySelector("#unity-loading-bar");
+      var progressBarFull = document.querySelector("#unity-progress-bar-full");
+      var warningBanner = document.querySelector("#unity-warning");
 
-    var container = document.querySelector("#unity-container");
-    var canvas = document.querySelector("#unity-canvas");
-    var loadingBar = document.querySelector("#unity-loading-bar");
-    var progressBarFull = document.querySelector("#unity-progress-bar-full");
-    var warningBanner = document.querySelector("#unity-warning");
-
-    function unityShowBanner(msg, type) {
+      // Shows a temporary message banner/ribbon for a few seconds, or
+      // a permanent error message on top of the canvas if type=='error'.
+      // If type=='warning', a yellow highlight color is used.
+      // Modify or remove this function to customize the visually presented
+      // way that non-critical warnings and error messages are presented to the
+      // user.
+      function unityShowBanner(msg, type) {
         function updateBannerVisibility() {
-            warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
+          warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
         }
         var div = document.createElement('div');
         div.innerHTML = msg;
         warningBanner.appendChild(div);
         if (type == 'error') div.style = 'background: red; padding: 10px;';
         else {
-            if (type == 'warning') div.style = 'background: yellow; padding: 10px;';
-            setTimeout(function() {
-                warningBanner.removeChild(div);
-                updateBannerVisibility();
-            }, 5000);
+          if (type == 'warning') div.style = 'background: yellow; padding: 10px;';
+          setTimeout(function() {
+            warningBanner.removeChild(div);
+            updateBannerVisibility();
+          }, 5000);
         }
         updateBannerVisibility();
-    }
+      }
 
-    var buildUrl = "Build";
-    var loaderUrl = buildUrl + "/OK_build.loader.js";
-    var config = {
+      var buildUrl = "Build";
+      var loaderUrl = buildUrl + "/OK_build.loader.js";
+      var config = {
         dataUrl: buildUrl + "/OK_build.data",
         frameworkUrl: buildUrl + "/OK_build.framework.js",
         codeUrl: buildUrl + "/OK_build.wasm",
         streamingAssetsUrl: "StreamingAssets",
         companyName: "MainPlayer",
-    productName: "Aviator",
-    productVersion: "0.2.94",
-    showBanner: unityShowBanner,
-    };
+        productName: "Aviator",
+        productVersion: "0.2.95",
+        showBanner: unityShowBanner,
+      };
 
-    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        // Mobile device style: fill the whole browser client area with the game canvas:
         var meta = document.createElement('meta');
         meta.name = 'viewport';
         meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes';
         document.getElementsByTagName('head')[0].appendChild(meta);
-    }
+      }
 
-    loadingBar.style.display = "block";
+      loadingBar.style.display = "block";
 
-    var script = document.createElement("script");
-    script.src = loaderUrl;
-    script.onload = () => {
+      var script = document.createElement("script");
+      script.src = loaderUrl;
+      script.onload = () => {
         createUnityInstance(canvas, config, (progress) => {
-            progressBarFull.style.width = 100 * progress + "%";
+          progressBarFull.style.width = 100 * progress + "%";
         }).then((instance) => {
-            loadingBar.style.display = "none";
-            unityInstance = instance;
-            window.unityInstance = instance;
+          loadingBar.style.display = "none";
+          unityInstance = instance;
+          window.unityInstance = instance;
         }).catch((message) => {
-            alert(message);
+          alert(message);
         });
-    };
-    document.body.appendChild(script);
-</script>
-</body>
+      };
+      document.body.appendChild(script);
+    </script>
+  </body>
 </html>
