@@ -38,6 +38,7 @@
       });*/
 
       window.unityInstance = null;
+      var unityInstance = null;
 
       window.idb = null;
 
@@ -117,9 +118,10 @@
       script.onload = () => {
         createUnityInstance(canvas, config, (progress) => {
           progressBarFull.style.width = 100 * progress + "%";
-        }).then((unityInstance) => {
+        }).then((instance) => {
           loadingBar.style.display = "none";
-          window.unityInstance = unityInstance;
+          unityInstance = instance;
+          window.unityInstance = instance;
         }).catch((message) => {
           alert(message);
         });
