@@ -1,8 +1,7 @@
 <!DOCTYPE html>
-<html lang="en-us">
+<html lang="ru">
 <head>
-    <meta charset="utf-8">
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta charset="utf-8" />
     <title>Good Forces - Unity WebGL Player | Aviator</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
@@ -13,83 +12,130 @@
     <canvas id="unity-canvas" width=960 height=640 tabindex="-1"></canvas>
     <div id="unity-loading-bar">
         <div id="unity-logo"></div>
-        <div id="unity-progress-bar-empty">
-            <div id="unity-progress-bar-full"></div>
-        </div>
+        <div id="unity-progress-bar-empty"><div id="unity-progress-bar-full"></div></div>
     </div>
     <div id="unity-warning"> </div>
 </div>
-<!--    <script src="https://unpkg.com/@vkontakte/superappkit@1.57.0/dist/index-umd.js"></script>-->
-<script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
+
 <script>
+    (function() {
+        if (typeof window === 'undefined') return;
+
+        // очередь сообщений, которые нужно отправить в Unity, если unityInstance ещё не готов
+        window._unityMessageQueue = window._unityMessageQueue || [];
+
+        // безопасная отправка сообщения в Unity: если unityInstance готов — отправляем,
+        // иначе — кладём в очередь
+        if (typeof window._sendUnityMessageSafe !== 'function') {
+            window._sendUnityMessageSafe = function(gameObject, methodName, payload) {
+                try {
+                    payload = (payload === undefined || payload === null) ? '' : payload;
+
+                    if (window.unityInstance && typeof window.unityInstance.SendMessage === 'function') {
+                        window.unityInstance.SendMessage(gameObject, methodName, payload);
+                        return true;
+                    } else {
+                        window._unityMessageQueue.push({
+                            gameObject: gameObject,
+                            methodName: methodName,
+                            payload: payload
+                        });
+                        return false;
+                    }
+                } catch (e) {
+                    console.error("_sendUnityMessageSafe error:", e);
+                    try {
+                        window._unityMessageQueue = window._unityMessageQueue || [];
+                        window._unityMessageQueue.push({
+                            gameObject: gameObject,
+                            methodName: methodName,
+                            payload: payload
+                        });
+                    } catch (ee) { console.warn("queue push failed", ee); }
+                    return false;
+                }
+            };
+        }
+
+        // функция для очистки очереди — отправляет все накопленные сообщения в Unity
+        if (typeof window._flushUnityQueue !== 'function') {
+            window._flushUnityQueue = function() {
+                if (!window._unityMessageQueue || !window._unityMessageQueue.length) return;
+                if (!window.unityInstance || typeof window.unityInstance.SendMessage !== 'function') return;
+
+                try {
+                    for (var i = 0; i < window._unityMessageQueue.length; i++) {
+                        var it = window._unityMessageQueue[i];
+                        try {
+                            window.unityInstance.SendMessage(it.gameObject, it.methodName, it.payload);
+                        } catch (e) {
+                            console.warn("Error sending queued message", it, e);
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Error flushing unity message queue", e);
+                } finally {
+                    window._unityMessageQueue.length = 0;
+                }
+            };
+        }
+    })();
+</script>
+
+<!-- connect.js (виджеты OK) -->
+<script src="https://connect.ok.ru/connect.js"></script>
+
+<!-- optional: примерная загрузка oksdk (если у вас своя сборка - замените URL) -->
+<script>
+    // Значения из OkService (проверьте, если нужно заменить)
+    window.OK_APP_ID = "512003543994";
+    window.OK_APP_KEY = "CLLEBLMGDIHBABABA";
+
+    window.OKSDK_CONFIG = {
+        appId: window.OK_APP_ID,
+        appKey: window.OK_APP_KEY
+    };
+
+    (function loadOkOptionalSdk() {
+        // Замените URL на вашу стабильную версию SDK при необходимости
+        var oksdkUrl = "https://cdn.jsdelivr.net/gh/odnoklassniki/ok-js-sdk@master/oksdk.js";
+        var s = document.createElement('script'); s.src = oksdkUrl; s.async = true;
+        s.onload = function(){ console.log("oksdk loaded from", oksdkUrl); /* SDK загружен — инициализация SDK выполняется из jslib/Unity */ };
+        s.onerror = function(){ console.warn("Failed to load oksdk from", oksdkUrl); };
+        document.head.appendChild(s);
+    })();
+</script>
+
+<script>
+    // ServiceWorker
     window.addEventListener("load", function () {
         if ("serviceWorker" in navigator) {
-            navigator.serviceWorker.register("ServiceWorker.js");
+            navigator.serviceWorker.register("ServiceWorker.js").catch(e => console.warn("SW reg failed", e));
         }
     });
 
-    console.info( window );
-    console.info( window.vkBridge );
-
-    window.vkBridge.send('VKWebAppInit', {});
-    /* window.vkBridge.subscribe((e) => {
-       console.log( "vkBridge event ----------------------------" );
-       console.info( e );
-     });*/
-
-    window.unityInstance = null;
-    var unityInstance = null;
-
+    // IndexedDB
     window.idb = null;
-
     let indexedDB = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB || window.shimIndexedDB;
+    let openReq = indexedDB.open("RA1", 2);
+    openReq.onupgradeneeded = function() { let db = openReq.result; if (!db.objectStoreNames.contains("Saves")) db.createObjectStore("Saves", {keyPath: "id"}); };
+    openReq.onsuccess = function() { window.idb = openReq.result; };
+    openReq.onerror = function(e) { console.warn("IDB open error", e); };
+    window.getIndexedDB = function () { return window.idb; };
 
-    let open = indexedDB.open("RA1", 2);
-
-    open.onupgradeneeded = function() {
-        let db = open.result;
-        let store = db.createObjectStore("Saves", {keyPath: "id"});
-        //    var index = store.createIndex("NameIndex", ["name.last", "name.first"]);
-    };
-
-    open.onsuccess = function() {
-        window.idb = open.result;
-    };
-
-    window.getIndexedDB = function () {
-        return window.idb;
-    };
-
-    var container = document.querySelector("#unity-container");
+    // UI helper
     var canvas = document.querySelector("#unity-canvas");
     var loadingBar = document.querySelector("#unity-loading-bar");
     var progressBarFull = document.querySelector("#unity-progress-bar-full");
     var warningBanner = document.querySelector("#unity-warning");
-
-    // Shows a temporary message banner/ribbon for a few seconds, or
-    // a permanent error message on top of the canvas if type=='error'.
-    // If type=='warning', a yellow highlight color is used.
-    // Modify or remove this function to customize the visually presented
-    // way that non-critical warnings and error messages are presented to the
-    // user.
     function unityShowBanner(msg, type) {
-        function updateBannerVisibility() {
-            warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
-        }
-        var div = document.createElement('div');
-        div.innerHTML = msg;
-        warningBanner.appendChild(div);
-        if (type == 'error') div.style = 'background: red; padding: 10px;';
-        else {
-            if (type == 'warning') div.style = 'background: yellow; padding: 10px;';
-            setTimeout(function() {
-                warningBanner.removeChild(div);
-                updateBannerVisibility();
-            }, 5000);
-        }
+        function updateBannerVisibility() { warningBanner.style.display = warningBanner.children.length ? 'block' : 'none'; }
+        var div = document.createElement('div'); div.innerHTML = msg; warningBanner.appendChild(div);
+        if (type == 'error') div.style = 'background: red; padding: 10px;'; else { if (type == 'warning') div.style = 'background: yellow; padding: 10px;'; setTimeout(()=>{ warningBanner.removeChild(div); updateBannerVisibility(); }, 5000); }
         updateBannerVisibility();
     }
 
+    // Unity loader
     var buildUrl = "Build";
     var loaderUrl = buildUrl + "/OK_build.loader.js";
     var config = {
@@ -99,14 +145,12 @@
         streamingAssetsUrl: "StreamingAssets",
         companyName: "MainPlayer",
     productName: "Aviator",
-    productVersion: "0.2.98",
+    productVersion: "0.2.99",
     showBanner: unityShowBanner,
     };
 
     if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-        // Mobile device style: fill the whole browser client area with the game canvas:
-        var meta = document.createElement('meta');
-        meta.name = 'viewport';
+        var meta = document.createElement('meta'); meta.name = 'viewport';
         meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes';
         document.getElementsByTagName('head')[0].appendChild(meta);
     }
@@ -122,9 +166,40 @@
             loadingBar.style.display = "none";
             unityInstance = instance;
             window.unityInstance = instance;
-        }).catch((message) => {
-            alert(message);
-        });
+
+            // flush queue (при установке unityInstance)
+            try {
+                if (typeof window._flushUnityQueue === 'function') {
+                    window._flushUnityQueue();
+                } else {
+                    // fallback flush прямо здесь
+                    if (window._unityMessageQueue && window._unityMessageQueue.length && window.unityInstance && typeof window.unityInstance.SendMessage === 'function') {
+                        try {
+                            for (var i = 0; i < window._unityMessageQueue.length; i++) {
+                                var it = window._unityMessageQueue[i];
+                                try { window.unityInstance.SendMessage(it.gameObject, it.methodName, it.payload); } catch(e){ console.warn("Error sending queued message", it, e); }
+                            }
+                        } catch(e) { console.warn("Error flushing unity message queue", e); }
+                        window._unityMessageQueue.length = 0;
+                    }
+                }
+            } catch(e){ console.warn("flush queue error", e); }
+
+            // опционально: уведомить Unity, что скрипты OK подгружены
+            try {
+                var okReady = typeof OKSDK !== 'undefined' || typeof OK !== 'undefined' || typeof ODKL !== 'undefined';
+                if (okReady) {
+                    try {
+                        // используем безопасную отправку (если helper доступен)
+                        if (typeof window._sendUnityMessageSafe === 'function') {
+                            window._sendUnityMessageSafe('OkServiceMono', 'OnSdkScriptLoaded', JSON.stringify({loaded:true}));
+                        } else if (window.unityInstance && typeof window.unityInstance.SendMessage === 'function') {
+                            window.unityInstance.SendMessage('OkServiceMono', 'OnSdkScriptLoaded', JSON.stringify({loaded:true}));
+                        }
+                    } catch(e){ console.warn(e); }
+                }
+            } catch(e){ console.warn(e); }
+        }).catch((message) => { alert(message); });
     };
     document.body.appendChild(script);
 </script>
