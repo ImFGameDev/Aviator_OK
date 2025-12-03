@@ -1,4 +1,4 @@
-const cacheName = "MainPlayer-Aviator-0.3.13";
+const cacheName = "MainPlayer-Aviator-0.3.14";
 const contentToCache = [
     "Build/OK_build.loader.js",
     "Build/OK_build.framework.js.unityweb",
